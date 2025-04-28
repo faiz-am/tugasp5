@@ -1,89 +1,68 @@
 package pemkom2;
-//aktifkan server dulu
-import javax.swing.*;
 import java.io.*;
 import java.net.*;
+import javax.swing.*;
 
 public class Server extends JFrame {
+    private JButton startButton;
     private JTextArea textArea;
-    private JTextField messageField;
-    private JButton sendButton;
     private ServerSocket serverSocket;
-    private Socket clientSocket;
-    private DataInputStream dis;
-    private DataOutputStream dos;
+    private Socket socket;
 
     public Server() {
-        setTitle("Server Chat");
-        setSize(400, 400);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setTitle("Server - File Receiver");
+        setSize(400, 300);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // Membuat komponen GUI
+        startButton = new JButton("Start Server");
         textArea = new JTextArea();
         textArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS); // Menjaga scrollbar
 
-        messageField = new JTextField(30);
-        sendButton = new JButton("Send");
+        add(startButton, "North");
+        add(scrollPane, "Center");
 
-        // Menambahkan event handler untuk tombol kirim
-        sendButton.addActionListener(e -> sendMessage());
-
-        // Mengatur layout
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.add(scrollPane);  // Menambahkan area chat
-        JPanel bottomPanel = new JPanel();
-        bottomPanel.add(messageField);
-        bottomPanel.add(sendButton);
-        panel.add(bottomPanel);
-
-        add(panel);
-
-        // Menjalankan server chat
-        startServer();
+        startButton.addActionListener(e -> startServer());
     }
 
     private void startServer() {
         new Thread(() -> {
             try {
-                int port = 12345;
-                serverSocket = new ServerSocket(port);
-                textArea.append("Server listening on port " + port + "...\n");
+                serverSocket = new ServerSocket(5000);
+                textArea.append("Server started. Waiting for client...\n");
 
-                // Menunggu koneksi dari client
-                clientSocket = serverSocket.accept();
-                textArea.append("Client connected: " + clientSocket.getInetAddress() + "\n");
+                socket = serverSocket.accept();
+                textArea.append("Client connected.\n");
 
-                dis = new DataInputStream(clientSocket.getInputStream());
-                dos = new DataOutputStream(clientSocket.getOutputStream());
+                DataInputStream dis = new DataInputStream(socket.getInputStream());
+                String fileName = dis.readUTF();
+                long fileSize = dis.readLong();
 
-                // Menerima pesan dari client
-                String message;
-                while ((message = dis.readUTF()) != null) {
-                    textArea.append("Client: " + message + "\n");
-                    textArea.setCaretPosition(textArea.getDocument().getLength()); // Scroll otomatis ke bawah
+                FileOutputStream fos = new FileOutputStream("received_" + fileName);
+                byte[] buffer = new byte[4096];
+
+                int read;
+                long totalRead = 0;
+                long remaining = fileSize;
+
+                while ((read = dis.read(buffer, 0, (int) Math.min(buffer.length, remaining))) > 0) {
+                    totalRead += read;
+                    remaining -= read;
+                    fos.write(buffer, 0, read);
                 }
-            } catch (IOException e) {
-                textArea.append("Error: " + e.getMessage() + "\n");
+
+                textArea.append("File received: " + fileName + " (" + fileSize + " bytes)\n");
+
+                fos.close();
+                dis.close();
+                socket.close();
+                serverSocket.close();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+                textArea.append("Error: " + ex.getMessage() + "\n");
             }
         }).start();
-    }
-
-    private void sendMessage() {
-        String message = messageField.getText();
-        if (!message.isEmpty()) {
-            try {
-                dos.writeUTF(message); // Mengirimkan pesan ke client
-                textArea.append("Server: " + message + "\n");
-                textArea.setCaretPosition(textArea.getDocument().getLength()); // Scroll otomatis ke bawah
-                messageField.setText(""); // Menghapus field input
-            } catch (IOException e) {
-                textArea.append("Error: " + e.getMessage() + "\n");
-            }
-        }
     }
 
     public static void main(String[] args) {

@@ -3,83 +3,90 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package pemkom2;
-import javax.swing.*;
 import java.io.*;
 import java.net.*;
-//aktifkan server dulu
+import javax.swing.*;
+
 public class Client extends JFrame {
-    private JTextArea textArea;
-    private JTextField messageField;
+    private JButton connectButton;
     private JButton sendButton;
+    private JTextArea textArea;
+    private JFileChooser fileChooser;
     private Socket socket;
-    private DataInputStream dis;
     private DataOutputStream dos;
+    private File selectedFile;
 
     public Client() {
-        setTitle("Client Chat");
-        setSize(400, 400);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setTitle("Client - File Sender");
+        setSize(400, 300);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
-        // Membuat komponen GUI
+        connectButton = new JButton("Connect to Server");
+        sendButton = new JButton("Choose File & Send");
+        sendButton.setEnabled(false);
+
         textArea = new JTextArea();
         textArea.setEditable(false);
         JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS); // Menjaga scrollbar
 
-        messageField = new JTextField(30);
-        sendButton = new JButton("Send");
+        JPanel topPanel = new JPanel();
+        topPanel.add(connectButton);
+        topPanel.add(sendButton);
 
-        // Menambahkan event handler untuk tombol kirim
-        sendButton.addActionListener(e -> sendMessage());
+        add(topPanel, "North");
+        add(scrollPane, "Center");
 
-        // Mengatur layout
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.add(scrollPane);  // Menambahkan area chat
-        JPanel bottomPanel = new JPanel();
-        bottomPanel.add(messageField);
-        bottomPanel.add(sendButton);
-        panel.add(bottomPanel);
+        fileChooser = new JFileChooser();
 
-        add(panel);
-
-        // Menjalankan client chat
-        startClient();
+        connectButton.addActionListener(e -> connectToServer());
+        sendButton.addActionListener(e -> chooseAndSendFile());
     }
 
-    private void startClient() {
-        new Thread(() -> {
-            try {
-                String serverAddress = "127.0.0.1"; // Ganti dengan IP server
-                int port = 12345;
-                socket = new Socket(serverAddress, port);
-                dis = new DataInputStream(socket.getInputStream());
-                dos = new DataOutputStream(socket.getOutputStream());
-
-                // Menerima pesan dari server
-                String message;
-                while ((message = dis.readUTF()) != null) {
-                    textArea.append("Server: " + message + "\n");
-                    textArea.setCaretPosition(textArea.getDocument().getLength()); // Scroll otomatis ke bawah
-                }
-            } catch (IOException e) {
-                textArea.append("Error: " + e.getMessage() + "\n");
-            }
-        }).start();
+    private void connectToServer() {
+        try {
+            socket = new Socket("localhost", 5000); // Ganti IP kalau beda device
+            dos = new DataOutputStream(socket.getOutputStream());
+            textArea.append("Connected to server.\n");
+            sendButton.setEnabled(true);
+            connectButton.setEnabled(false);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            textArea.append("Connection failed: " + ex.getMessage() + "\n");
+        }
     }
 
-    private void sendMessage() {
-        String message = messageField.getText();
-        if (!message.isEmpty()) {
-            try {
-                dos.writeUTF(message); // Mengirimkan pesan ke server
-                textArea.append("Client: " + message + "\n");
-                textArea.setCaretPosition(textArea.getDocument().getLength()); // Scroll otomatis ke bawah
-                messageField.setText(""); // Menghapus field input
-            } catch (IOException e) {
-                textArea.append("Error: " + e.getMessage() + "\n");
+    private void chooseAndSendFile() {
+        int returnValue = fileChooser.showOpenDialog(this);
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            selectedFile = fileChooser.getSelectedFile();
+            new Thread(() -> sendFile()).start();
+        }
+    }
+
+    private void sendFile() {
+        try {
+            String fileName = selectedFile.getName();
+            long fileSize = selectedFile.length();
+
+            dos.writeUTF(fileName);
+            dos.writeLong(fileSize);
+
+            FileInputStream fis = new FileInputStream(selectedFile);
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = fis.read(buffer)) > 0) {
+                dos.write(buffer, 0, read);
             }
+            textArea.append("File sent: " + fileName + " (" + fileSize + " bytes)\n");
+
+            fis.close();
+            dos.close();
+            socket.close();
+            sendButton.setEnabled(false);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            textArea.append("Error sending file: " + ex.getMessage() + "\n");
         }
     }
 
